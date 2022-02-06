@@ -5,9 +5,9 @@ on: [pull_request]
 jobs:
   build:
 
-    runs-on: ubuntu-latest
-
+    runs-on: ubuntu-latest    
     steps:
+    - uses: actions/checkout@v2
     - name: Set up Python 3.9
       id: step1
       uses: actions/setup-python@v2
