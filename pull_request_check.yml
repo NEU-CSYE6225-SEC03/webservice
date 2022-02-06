@@ -1,0 +1,32 @@
+name: pull_request_check
+
+on: [pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Set up Python 3.9
+      id: step1
+      uses: actions/setup-python@v2
+      with:
+        python-version: 3.9
+    - name: Install dependencies
+      id: step2
+      run: pip install -r requirements.txt
+    - name: Start server
+      id: step3
+      run: python3 service_main.py
+    - name: unittest_a1
+      id: step4
+      run: |
+        status_code=`curl --silent -X GET 127.0.0.1:6225/healthz -w "%{http_code}"`
+        if [ $status_code == "200" ]
+        then
+          echo "UnitTest Pass"
+        else
+          echo "UnitTest Fail"
+          exit 1
+        fi
