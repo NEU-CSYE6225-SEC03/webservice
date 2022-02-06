@@ -15,18 +15,10 @@ jobs:
         python-version: 3.9
     - name: Install dependencies
       id: step2
-      run: pip install -r requirements.txt
-    - name: Start server
-      id: step3
-      run: python3 service_main.py
-    - name: unittest_a1
-      id: step4
       run: |
-        status_code=`curl --silent -X GET 127.0.0.1:6225/healthz -w "%{http_code}"`
-        if [ $status_code == "200" ]
-        then
-          echo "UnitTest Pass"
-        else
-          echo "UnitTest Fail"
-          exit 1
-        fi
+        python3 -m pip install --upgrade pip
+        pip install -r requirements.txt
+    - name: unittest
+      id: step3
+      run: |
+        python3 test_main.py
