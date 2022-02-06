@@ -1,3 +1,5 @@
+import os
+
 from tornado.test.util import unittest
 from tornado.testing import AsyncHTTPTestCase
 from tornado.web import Application
@@ -19,7 +21,10 @@ class WebHandlerTest(BaseTest):
 
     def test_sub(self):
         response = self.fetch('/healthz', method='GET')
-        self.assertEqual(response.code, 200)
+        try:
+            self.assertEqual(response.code, 200)
+        except:
+            os.exit(1)
 
 
 if __name__ == '__main__':
