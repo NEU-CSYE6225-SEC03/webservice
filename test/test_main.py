@@ -1,10 +1,10 @@
 import os
-
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # Add path of cwd to sys
 from tornado.test.util import unittest
 from tornado.testing import AsyncHTTPTestCase
-from tornado.web import Application
+from service.service_main import make_app
 
-from service_main import HealthzHandler
 
 class BaseTest(AsyncHTTPTestCase):
     def setUp(self):
@@ -12,17 +12,14 @@ class BaseTest(AsyncHTTPTestCase):
         super(BaseTest, self).setUp()
 
 
-class WebHandlerTest(BaseTest):
-
+class HealthzTest(BaseTest):
     def get_app(self):
-        return Application([
-            ('/healthz', HealthzHandler),
-        ])
+        return make_app()
 
-    def test_sub(self):
+    def test(self):
         response = self.fetch('/healthz', method='GET')
         self.assertEqual(response.code, 200)
 
+
 if __name__ == '__main__':
     unittest.main()
-
