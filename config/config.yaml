@@ -1,0 +1,26 @@
+# Server ip
+IP: '0.0.0.0'
+
+# Server port
+PORT: 6225
+
+# log name
+LOG_FILENAME: './log/debug.log'
+
+# log level
+LOG_LEVEL: 'INFO'
+
+# log format
+LOG_FORMAT: '[%(asctime)s][%(filename)s: %(lineno)d][%(levelname)s][%(process)d][%(thread)d] - %(message)s'
+
+# MySQL IP
+MYSQL_IP: '127.0.0.1'
+
+# MySQL Port
+MYSQL_PORT: 3306
+
+# MySQL UserName
+MYSQL_USERNAME: 'root'
+
+# MySQL Password
+MYSQL_PASSWORD: '???'
