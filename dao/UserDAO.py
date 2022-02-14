@@ -104,7 +104,7 @@ class UserDAO(object):
                 except Exception as e:
                     Logger.getInstance().exception(e)
 
-        data.pop("password")
+        data.pop("password")  # 返回不应该有密码
         if affectRowNum:
             return True, data
         else:

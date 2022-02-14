@@ -2,10 +2,8 @@ import jwt
 import datetime
 from jwt import exceptions
 
-JWT_SALT = 'huoyingwhw666'
 
-
-def create_token(payload, timeout=20) -> str:
+def createToken(payload, timeout=20) -> str:
     """
     :param payload:  例如：{'user_id':1,'username':'whw'}用户信息
     :param timeout: token的过期时间，默认20分钟
@@ -16,20 +14,24 @@ def create_token(payload, timeout=20) -> str:
         'alg': 'HS256'
     }
     payload['exp'] = datetime.datetime.utcnow() + datetime.timedelta(minutes=timeout)
-    result = jwt.encode(payload=payload, key=JWT_SALT, algorithm="HS256", headers=headers)
+    key = "laiweifeng233"
+    algorithm = "HS256"
+    result = jwt.encode(payload=payload, key=key, algorithm=algorithm, headers=headers)
 
     return result
 
 
-def parse_payload(token) -> dict:
+def parsePayload(token) -> dict:
     """
     对token进行和发行校验并获取payload
     :param token:
     :return:
     """
     result = {'status': False, 'data': None, 'error': None}
+    key = "laiweifeng233"
+    algorithms = ['HS256']
     try:
-        verified_payload = jwt.decode(token, JWT_SALT, ['HS256'])
+        verified_payload = jwt.decode(jwt=token, key=key, algorithms=algorithms)
         result['status'] = True
         result['data'] = verified_payload
     except exceptions.ExpiredSignatureError:
@@ -43,6 +45,6 @@ def parse_payload(token) -> dict:
 
 
 if __name__ == '__main__':
-    token = "eyJ0eXAiOiJqd3QiLCJhbGciOiJIUzI1NiJ9.eyJ1c2VybmFtZSI6IjY2NzE2QGdtYWlsLmNvbSIsImV4cCI6MTY0NDcwMDUwOX0.imv6vv9S6Vzq2ywOVBOAUeiNxfeD3VTdU1HaaUcoA3s"
-    res = parse_payload(token)
+    token = createToken(payload={'username': 'lwf@gg.com', 'password': '123'})
+    res = parsePayload(token)
     print(res)
