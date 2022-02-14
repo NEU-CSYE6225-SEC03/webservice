@@ -11,12 +11,13 @@ from tool.Config import Config
 from tool.Logger import Logger
 from tool.regexTool import isValidEmail
 from tool.cryptTool import encrypt, checkSame
-from tool.JwtAuth import JWT_SALT, create_token, parse_payload
+from tool.JwtAuth import createToken, parsePayload
 from tool.MysqlConnectPool import MysqlConnectPool
 from dao.UserDAO import UserDAO
 
 
 class BaseHandler(tornado.web.RequestHandler):
+    @tornado.gen.coroutine
     def prepare(self):
         super(BaseHandler, self).prepare()
 
@@ -25,19 +26,27 @@ class BaseHandler(tornado.web.RequestHandler):
 
 
 class TokenHandler(BaseHandler):
-
+    @tornado.gen.coroutine
     def prepare(self):
         # 通过 Authorization 请求头传递 token
         head = self.request.headers
         token = head.get("Authorization", "")
-        result = parse_payload(token)
-        if not result["status"]:
-            self.token_passed = False
-        else:
-            self.token_passed = True
+        result = parsePayload(token)
+        self.token_passed = False
 
-        # self.token_msg = json.dumps(result, ensure_ascii=False)  # str in json format
-        self.token_msg = result  # dict in json format
+        if result["status"]:
+            # 解析 payload, 提取 username 和 password 进行比对
+            data = result["data"]
+            if data is not None:
+                # self.token_msg = json.dumps(result, ensure_ascii=False)  # str in json format
+                self.token_msg = result["data"]  # dict in json format
+                username = self.token_msg.get("username", None)
+                password = self.token_msg.get("password", None)
+                if username is not None and password is not None:
+                    dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+                    userInfo = yield dao.getUserInfoByUsername(username)
+                    if userInfo is not None and (userInfo["username"] == username and userInfo["password"] == password):
+                            self.token_passed = True
 
 
 class HealthzHandler(BaseHandler):
@@ -78,7 +87,8 @@ class UserCreateHandler(BaseHandler):
             password = encrypt(password)  # encrypt password
             isSuccess, respBodyDict = yield dao.createUser(first_name, last_name, username, password)
             if isSuccess:
-                respBodyDict['token'] = create_token(payload={"username": username}, timeout=20)
+                print("type passwd: ", type(password))
+                respBodyDict['token'] = createToken(payload={"username": username, "password": password}, timeout=20)
                 self.set_status(201)
                 self.write(respBodyDict)
             else:
@@ -104,7 +114,7 @@ class UserInfoHandler(TokenHandler):
                 self.finish()
                 return
 
-            username = self.token_msg['data']['username']
+            username = self.token_msg['username']
             dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
             respBodyDict = yield dao.getUserInfoByUsername(username)
             respBodyDict.pop("password")
