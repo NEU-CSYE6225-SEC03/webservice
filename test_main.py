@@ -21,7 +21,7 @@ class WebHandlerTest(BaseTest):
 
     def test_sub(self):
         response = self.fetch('/healthz', method='GET')
-        self.assertEqual(response.code, 200)
+        self.assertEqual(response.code, 400)
 
 if __name__ == '__main__':
     unittest.main()
