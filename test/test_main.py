@@ -18,7 +18,7 @@ class HealthzTest(BaseTest):
 
     def test(self):
         response = self.fetch('/healthz', method='GET')
-        self.assertEqual(response.code, 400)
+        self.assertEqual(response.code, 200)
 
 
 if __name__ == '__main__':
