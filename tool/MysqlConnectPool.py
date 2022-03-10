@@ -23,7 +23,7 @@ class MysqlConnectPool(object):
         self.port = Config.getInstance()['MYSQL_PORT']
         self.user = Config.getInstance()['MYSQL_USERNAME']
         self.password = Config.getInstance()['MYSQL_PASSWORD']
-        self.database = "webservice"
+        self.database = "csye6225"
 
         self.loop.run_until_complete(self.createPool())
 

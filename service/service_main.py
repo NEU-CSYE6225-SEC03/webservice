@@ -1,6 +1,8 @@
 import os
 import sys
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # Add path of cwd to sys
+
 import json
 import asyncio
 import tornado.web
@@ -11,9 +13,11 @@ from tool.Config import Config
 from tool.Logger import Logger
 from tool.regexTool import isValidEmail
 from tool.cryptTool import encrypt, checkSame
+from tool.BasicAuth import isBasicAuth, parseBasicAuth
 from tool.JwtAuth import createToken, parsePayload
 from tool.MysqlConnectPool import MysqlConnectPool
 from dao.UserDAO import UserDAO
+from dao.ImageDAO import ImageDAO
 
 
 class BaseHandler(tornado.web.RequestHandler):
@@ -31,21 +35,37 @@ class TokenHandler(BaseHandler):
         # 通过 Authorization 请求头传递 token
         head = self.request.headers
         token = head.get("Authorization", "")
-        result = parsePayload(token)
         self.token_passed = False
 
-        if result["status"]:
-            # 解析 payload, 提取 username 和 password 进行比对
-            data = result["data"]
-            if data is not None:
-                # self.token_msg = json.dumps(result, ensure_ascii=False)  # str in json format
-                self.token_msg = result["data"]  # dict in json format
-                username = self.token_msg.get("username", None)
-                password = self.token_msg.get("password", None)
-                if username is not None and password is not None:
-                    dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
-                    userInfo = yield dao.getUserInfoByUsername(username)
-                    if userInfo is not None and (userInfo["username"] == username and userInfo["password"] == password):
+        if isBasicAuth(token):
+            # basic auth token
+            result = parseBasicAuth(token)
+            if result["status"]:
+                data = result["data"]
+                if data is not None:
+                    self.token_msg = result["data"]  # dict in json format
+                    username = self.token_msg.get("username", None)
+                    password = self.token_msg.get("password", None)
+                    if username is not None and password is not None:
+                        dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+                        userInfo = yield dao.getUserInfoByUsername(username)
+                        if userInfo is not None and (username == userInfo["username"] and checkSame(password, userInfo["password"])):
+                            self.token_passed = True
+        else:
+            # jwt auth token
+            result = parsePayload(token)
+            if result["status"]:
+                # 解析 payload, 提取 username 和 password 进行比对
+                data = result["data"]
+                if data is not None:
+                    # self.token_msg = json.dumps(result, ensure_ascii=False)  # str in json format
+                    self.token_msg = result["data"]  # dict in json format
+                    username = self.token_msg.get("username", None)
+                    password = self.token_msg.get("password", None)
+                    if username is not None and password is not None:
+                        dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+                        userInfo = yield dao.getUserInfoByUsername(username)
+                        if userInfo is not None and (userInfo["username"] == username and userInfo["password"] == password):
                             self.token_passed = True
 
 
@@ -87,8 +107,7 @@ class UserCreateHandler(BaseHandler):
             password = encrypt(password)  # encrypt password
             isSuccess, respBodyDict = yield dao.createUser(first_name, last_name, username, password)
             if isSuccess:
-                print("type passwd: ", type(password))
-                respBodyDict['token'] = createToken(payload={"username": username, "password": password}, timeout=20)
+                # respBodyDict['token'] = createToken(payload={"username": username, "password": password}, timeout=20)  # JWT token
                 self.set_status(201)
                 self.write(respBodyDict)
             else:
@@ -189,11 +208,150 @@ class UserInfoHandler(TokenHandler):
             Logger.getInstance().exception(err)
 
 
+class PictureHandler(TokenHandler):
+
+    def set_default_headers(self):
+        self.set_header("Access-Control-Allow-Origin", "*")
+        self.set_header("Access-Control-Allow-Headers", "x-requested-with")
+        self.set_header('Access-Control-Allow-Methods', 'POST, GET, DELETE')
+
+    @tornado.gen.coroutine
+    def post(self):
+        try:
+            self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
+
+            if not self.token_passed:
+                Logger.getInstance().info('token auth fail')
+                self.set_status(400)
+                self.finish()
+                return
+
+            # Grab uploaded file data
+            files = self.request.files["profilePic"]
+            if len(files) == 0:
+                Logger.getInstance().info('Cannot receive any picture file')
+                self.set_status(400)
+                self.finish()
+
+            file = files[0]
+            file_name = file.get('filename', None)
+            if file_name is None:
+                Logger.getInstance().info('Cannot get picture file name')
+                self.set_status(400)
+                self.finish()
+
+            file_data = file.get('body', None)
+            if file_data is None:
+                Logger.getInstance().info('Cannot get picture file data')
+                self.set_status(400)
+                self.finish()
+
+            file_type = file.get('content_type', None)
+            if file_type is None:
+                Logger.getInstance().info('Cannot get picture file type')
+                self.set_status(400)
+                self.finish()
+
+            # Get user info
+            user_dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+            sql_status, user_id = yield user_dao.getUserIdByUserName(username=self.token_msg['username'])
+
+            # Add or update image info
+            img_dao = ImageDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+            img_exist = yield img_dao.userImageExist(user_id)
+            if img_exist:
+                url = yield img_dao.getUserImage(user_id)
+                """ S3 旧图片需要删除 """
+                # delete S3.....
+                """ S3 旧图片需要上传 """
+                url = "this_is_new_url"
+
+                yield img_dao.updateUserImage(file_name=file_name, url=url, user_id=user_id)
+            else:
+                """ S3 旧图片需要上传 """
+                url = "this_is_new_url"
+
+                yield img_dao.createUserImage(file_name=file_name, url=url, user_id=user_id)
+
+            # Make response
+            resp_body = yield img_dao.getUserImage(user_id)
+
+            self.set_status(201)
+            self.write(resp_body)
+
+        except Exception as err:
+            Logger.getInstance().exception(err)
+            self.set_status(400)
+            self.finish()
+            return
+
+    @tornado.gen.coroutine
+    def get(self):
+        try:
+            self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
+
+            if not self.token_passed:
+                Logger.getInstance().info('token auth fail')
+                self.set_status(400)
+                self.finish()
+                return
+
+            user_dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+            sql_status, user_id = yield user_dao.getUserIdByUserName(username=self.token_msg['username'])
+            img_dao = ImageDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+
+            img_exist = yield img_dao.userImageExist(user_id)
+            if img_exist:
+                resp_body = yield img_dao.getUserImage(user_id)
+
+                self.set_status(200)
+                self.write(resp_body)
+            else:
+                self.set_status(404)
+                self.finish()
+
+        except Exception as err:
+            Logger.getInstance().exception(err)
+            self.set_status(400)
+            self.finish()
+            return
+
+    @tornado.gen.coroutine
+    def delete(self):
+        try:
+            self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
+
+            if not self.token_passed:
+                Logger.getInstance().info('token auth fail')
+                self.set_status(401)
+                self.finish()
+                return
+
+            user_dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+            sql_status, user_id = yield user_dao.getUserIdByUserName(username=self.token_msg['username'])
+            img_dao = ImageDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+
+            img_exist = yield img_dao.userImageExist(user_id)
+            if img_exist:
+                yield img_dao.deleteUserImage(user_id)
+                """ S3 操作 删除旧图片 """
+
+                self.set_status(204)
+                self.finish()
+            else:
+                self.set_status(404)
+                self.finish()
+
+        except Exception as err:
+            Logger.getInstance().exception(err)
+
+
 def make_app():
     return tornado.web.Application([
         (r"/healthz", HealthzHandler),
         (r"/v1/user", UserCreateHandler),
         (r"/v1/user/self", UserInfoHandler),
+        (r"/v1/user/self/pic", PictureHandler),
     ])
 
 

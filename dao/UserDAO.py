@@ -26,6 +26,23 @@ class UserDAO(object):
 
         return selectResult is not None
 
+    async def getUserIdByUserName(self, username: str):
+        selectResult = None
+        async with self.connect_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                try:
+                    await cursor.execute("SELECT id FROM user WHERE username = %s", [username, ])
+                    selectResult = await cursor.fetchone()
+                    Logger.getInstance().info('execute sql to determine exist of username[%s]' % username)
+
+                except Exception as e:
+                    Logger.getInstance().exception(e)
+
+        if selectResult is not None:
+            return True, selectResult[0]
+        else:
+            return False, None
+
     async def getUserInfoByUsername(self, username: str):
         selectResult = None
         async with self.connect_pool.acquire() as conn:
