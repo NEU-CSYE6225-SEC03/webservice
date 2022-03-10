@@ -9,6 +9,8 @@ import tornado.web
 import tornado.ioloop
 import tornado.httpserver
 import tornado.gen
+import boto3
+
 from tool.Config import Config
 from tool.Logger import Logger
 from tool.regexTool import isValidEmail
@@ -259,17 +261,27 @@ class PictureHandler(TokenHandler):
             # Add or update image info
             img_dao = ImageDAO(connect_pool=MYSQL_CONN_POOL.getPool())
             img_exist = yield img_dao.userImageExist(user_id)
+
+            s3resource = boto3.resource('s3')
+            s3bucket_name = Config.getInstance()['S3BUCKETNAME']
+
             if img_exist:
-                url = yield img_dao.getUserImage(user_id)
-                """ S3 旧图片需要删除 """
-                # delete S3.....
-                """ S3 旧图片需要上传 """
-                url = "this_is_new_url"
+                image_record = yield img_dao.getUserImage(user_id)
+                url = image_record['url']
+                """ S3 删除旧图片 """
+                s3resource.Object(s3bucket_name, url).delete()
+
+                """ S3 上传新图片 """
+                url = s3bucket_name + "/" + user_id + "/" + file_name
+                with open(file_data, 'rb') as f:
+                    s3resource.Object(s3bucket_name, url).put(Body=f)
 
                 yield img_dao.updateUserImage(file_name=file_name, url=url, user_id=user_id)
             else:
-                """ S3 旧图片需要上传 """
-                url = "this_is_new_url"
+                """ S3 图片需要上传 """
+                url = s3bucket_name + "/" + user_id + "/" + file_name
+                with open(file_data, 'rb') as f:
+                    s3resource.Object(s3bucket_name, url).put(Body=f)
 
                 yield img_dao.createUserImage(file_name=file_name, url=url, user_id=user_id)
 
@@ -333,8 +345,15 @@ class PictureHandler(TokenHandler):
 
             img_exist = yield img_dao.userImageExist(user_id)
             if img_exist:
+                """ S3 操作 删除图片 """
+                s3resource = boto3.resource('s3')
+                s3bucket_name = Config.getInstance()['S3BUCKETNAME']
+                image_record = yield img_dao.getUserImage(user_id)
+                url = image_record['url']
+                s3resource.Object(s3bucket_name, url).delete()
+
+                # 删除 DB metadata
                 yield img_dao.deleteUserImage(user_id)
-                """ S3 操作 删除旧图片 """
 
                 self.set_status(204)
                 self.finish()
