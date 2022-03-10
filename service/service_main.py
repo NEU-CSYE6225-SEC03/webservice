@@ -1,10 +1,10 @@
 import os
 import sys
-
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))  # Add path of cwd to sys
-
 import json
 import asyncio
+from io import BytesIO
+
 import tornado.web
 import tornado.ioloop
 import tornado.httpserver
@@ -273,15 +273,13 @@ class PictureHandler(TokenHandler):
 
                 """ S3 上传新图片 """
                 url = s3bucket_name + "/" + user_id + "/" + file_name
-                with open(file_data, 'rb') as f:
-                    s3resource.Object(s3bucket_name, url).put(Body=f)
+                s3resource.Object(s3bucket_name, url).put(Body=BytesIO(file_data))
 
                 yield img_dao.updateUserImage(file_name=file_name, url=url, user_id=user_id)
             else:
                 """ S3 图片需要上传 """
                 url = s3bucket_name + "/" + user_id + "/" + file_name
-                with open(file_data, 'rb') as f:
-                    s3resource.Object(s3bucket_name, url).put(Body=f)
+                s3resource.Object(s3bucket_name, url).put(Body=BytesIO(file_data))
 
                 yield img_dao.createUserImage(file_name=file_name, url=url, user_id=user_id)
 
