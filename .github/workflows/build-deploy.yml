@@ -47,7 +47,7 @@ jobs:
     - name: CodeDeploy api call
       run: |
         output=$(aws deploy create-deployment \
-          --application-name ${{ env.CODEDEPLOY_APPLICATION_NAME}} \
+          --application-name ${{env.CODEDEPLOY_APPLICATION_NAME}} \
           --deployment-config-name CodeDeployDefault.AllAtOnce \
           --deployment-group-name ${{env.CODEDEPLOY_APPLICATION_NAME_GROUP_NAME}} \
           --description "CSYE6225 -CodeDeploy" \
