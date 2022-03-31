@@ -3,7 +3,7 @@ os: linux
 
 files:
   - source: ./service/service_main.py
-    destination: /home/ec2-user/webservice/service/
+    destination: /home/ec2-user/
 
 hooks:
   AfterInstall:
