@@ -10,13 +10,11 @@ env:
   s3_bucket_name: ${{ secrets.PROD_S3_CODEDEPLOY_BUCKET }}
 
 on:
-  pull_request:
+  push:
     branches: [ main ]
-    types: [closed]
 
 jobs:
   ci-cd:
-    if: github.event.pull_request.merged == true 
     runs-on: ubuntu-latest
 
     steps:
