@@ -28,8 +28,6 @@ jobs:
         echo "ls -al"
         ls -al
         zip -r ${{env.ARTIFACT_NAME}} service/service_main.py appspec.yml ./scripts
-        echo "pwd"
-        pwd
         echo "ls -al"
         ls -al 
 
