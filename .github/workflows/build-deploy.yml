@@ -5,9 +5,9 @@ env:
   CODEDEPLOY_APPLICATION_NAME: webservice
   CODEDEPLOY_APPLICATION_NAME_GROUP_NAME: webservice-deployment
   AWS_REGION: us-east-1
-  aws_access_id: ${{secrets.PROD_AWS_ACCESS_KEY_ID}}
-  aws_access_key: ${{secrets.PROD_AWS_ACCESS_KEY}}
-  s3_bucket_name: ${{secrets.PROD_S3_CODEDEPLOY_BUCKET}}
+  aws_access_id: ${{ secrets.PROD_AWS_ACCESS_KEY_ID }}
+  aws_access_key: ${{ secrets.PROD_AWS_ACCESS_KEY }}
+  s3_bucket_name: ${{ secrets.PROD_S3_CODEDEPLOY_BUCKET }}
 
 on:
   pull_request:
