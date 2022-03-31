@@ -23,13 +23,18 @@ jobs:
 
     - name: Build deployment artifact
       run: |
+        echo "------------------------------------------"
         echo "pwd"
         pwd
+        echo "------------------------------------------"
         echo "ls -al"
         ls -al
+        echo "------------------------------------------"
         zip -r ${{env.ARTIFACT_NAME}} service/service_main.py appspec.yml ./scripts
+        echo "------------------------------------------"
         echo "ls -al"
         ls -al 
+        echo "------------------------------------------"
 
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
