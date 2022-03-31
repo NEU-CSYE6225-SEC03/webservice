@@ -1,0 +1,59 @@
+name: Build & Deploy webservice
+
+env:
+  ARTIFACT_NAME: webservice.zip
+  CODEDEPLOY_APPLICATION_NAME: webservice
+  CODEDEPLOY_APPLICATION_NAME_GROUP_NAME: webservice-deployment
+  AWS_REGION: us-east-1
+  aws_access_id: ${{secrets.PROD_AWS_ACCESS_KEY_ID}}
+  aws_access_key: ${{secrets.PROD_AWS_ACCESS_KEY}}
+  s3_bucket_name: ${{secrets.PROD_S3_CODEDEPLOY_BUCKET}}
+
+on:
+  pull_request:
+    branches: [ main ]
+    types: [closed]
+
+jobs:
+  ci-cd:
+    if: github.event.pull_request.merged == true 
+    runs-on: ubuntu-latest
+
+    steps:
+
+    - name: Checkout repo
+    - uses: actions/checkout@v2
+
+    - name: Build deployment artifact
+      run: |
+        pwd
+        ls -al
+        zip -r ${{env.ARTIFACT_NAME}} service/service_main.py appspec.yml ./scripts
+        pwd
+        ls -al 
+
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-access-key-id: ${{env.aws_access_id}}
+        aws-secret-access-key: ${{env.aws_access_key}}
+        aws-region: ${{env.AWS_REGION}}
+
+    - name: Copy Artifact to S3
+      run:
+        aws s3 cp ${{env.ARTIFACT_NAME}} s3://${{env.s3_bucket_name}}/${{env.ARTIFACT_NAME}}
+
+    - name: CodeDeploy api call
+      run: |
+        output=$(aws deploy create-deployment \
+          --application-name ${{ env.CODEDEPLOY_APPLICATION_NAME}} \
+          --deployment-config-name CodeDeployDefault.AllAtOnce \
+          --deployment-group-name ${{env.CODEDEPLOY_APPLICATION_NAME_GROUP_NAME}} \
+          --description "CSYE6225 -CodeDeploy" \
+          --s3-location bucket=${{env.s3_bucket_name}},key=${{env.ARTIFACT_NAME}},bundleType=zip \
+          --region ${{env.AWS_REGION}} \
+          --output json)
+          echo $output
+          dId=$(echo $output | jq -r '.deploymentId')
+          aws deploy wait deployment-successful --deployment-id $dId
+
