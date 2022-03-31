@@ -1,0 +1,23 @@
+version: 0.0
+os: linux
+
+files:
+  - source: ./
+    destination: /home/ec2-user/
+
+hooks:
+  AfterInstall:
+    - location: /home/ec2-user/webservice/scripts/AfterInstall.sh
+      timeout: 300
+      runas: ec2-user
+
+  ApplicationStart:
+    - location: /home/ec2-user/webservice/scripts/ApplicationStart.sh
+      timeout: 300
+      runas: ec2-user
+
+  ApplicationStop:
+    - location: /home/ec2-user/webservice/scripts/ApplicationStop.sh
+      timeout: 300
+      runas: ec2-user
+
