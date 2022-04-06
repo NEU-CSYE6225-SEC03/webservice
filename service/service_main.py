@@ -84,10 +84,10 @@ class HealthzHandler(BaseHandler):
         STATSD_CONN.timing('timing [GET] healthz ', (time.time() - service_start_time) * 1000)
 
 
-# class HealthHandler(BaseHandler):
-#     def get(self):
-#         self.set_header("Content-Type", "application/json; charset=utf-8")
-#         self.finish()
+class HealthHandler(BaseHandler):
+    def get(self):
+        self.set_header("Content-Type", "application/json; charset=utf-8")
+        self.finish()
 
 
 class UserCreateHandler(BaseHandler):
@@ -427,7 +427,7 @@ class PictureHandler(TokenHandler):
 def make_app():
     return tornado.web.Application([
         (r"/healthz", HealthzHandler),
-        # (r"/health", HealthHandler),
+        (r"/health", HealthHandler),
         (r"/v1/user", UserCreateHandler),
         (r"/v1/user/self", UserInfoHandler),
         (r"/v1/user/self/pic", PictureHandler),
