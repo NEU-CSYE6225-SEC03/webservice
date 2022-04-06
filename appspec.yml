@@ -4,6 +4,8 @@ os: linux
 files:
   - source: ./service/service_main.py
     destination: /home/ec2-user/
+  - source: ./cloudwatch-config.json
+    destination: /home/ec2-user/
 
 hooks:
   AfterInstall:
