@@ -31,7 +31,7 @@ jobs:
         ls -al
         echo "------------------------------------------"
         echo "Zip artifact......"
-        zip -r ${{env.ARTIFACT_NAME}} service/service_main.py appspec.yml ./scripts
+        zip -r ${{env.ARTIFACT_NAME}} service/service_main.py appspec.yml ./scripts cloudwatch-config.json
         echo "------------------------------------------"
         echo "ls -al"
         ls -al 

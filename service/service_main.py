@@ -4,7 +4,9 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) 
 import json
 import asyncio
 from io import BytesIO
+import time
 
+import statsd
 import tornado.web
 import tornado.ioloop
 import tornado.httpserver
@@ -73,20 +75,28 @@ class TokenHandler(BaseHandler):
 
 class HealthzHandler(BaseHandler):
     def get(self):
+        service_start_time = time.time()
+        STATSD_CONN.incr('[GET] healthz')
+
         self.set_header("Content-Type", "application/json; charset=utf-8")
         self.finish()
 
+        STATSD_CONN.timing('timing [GET] healthz ', (time.time() - service_start_time) * 1000)
 
-class HealthHandler(BaseHandler):
-    def get(self):
-        self.set_header("Content-Type", "application/json; charset=utf-8")
-        self.finish()
+
+# class HealthHandler(BaseHandler):
+#     def get(self):
+#         self.set_header("Content-Type", "application/json; charset=utf-8")
+#         self.finish()
 
 
 class UserCreateHandler(BaseHandler):
     @tornado.gen.coroutine
     def post(self):
+        service_start_time = time.time()
         try:
+            STATSD_CONN.incr('[POST] /v1/user')
+
             self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
 
             data = json.loads(self.request.body)
@@ -99,6 +109,7 @@ class UserCreateHandler(BaseHandler):
             if not isValidEmail(username):
                 Logger.getInstance().info('{username} is not a valid email address'.format(username=username))
                 self.set_status(400)
+                STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
@@ -108,6 +119,7 @@ class UserCreateHandler(BaseHandler):
             if usernameExist:
                 Logger.getInstance().info('duplicated username[{username}]'.format(username=username))
                 self.set_status(400)
+                STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
@@ -117,14 +129,17 @@ class UserCreateHandler(BaseHandler):
             if isSuccess:
                 # respBodyDict['token'] = createToken(payload={"username": username, "password": password}, timeout=20)  # JWT token
                 self.set_status(201)
+                STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
                 self.write(respBodyDict)
             else:
                 self.set_status(500)
+                STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
                 self.finish()
 
         except Exception as err:
             Logger.getInstance().exception(err)
             self.set_status(501)
+            STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
             self.finish()
             return
 
@@ -132,12 +147,16 @@ class UserCreateHandler(BaseHandler):
 class UserInfoHandler(TokenHandler):
     @tornado.gen.coroutine
     def get(self):
+        service_start_time = time.time()
         try:
+            STATSD_CONN.incr('[GET] /v1/user/self')
+
             self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
 
             if not self.token_passed:
                 Logger.getInstance().info('token auth fail')
                 self.set_status(400)
+                STATSD_CONN.timing('timing [GET] /v1/user/self ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
@@ -146,19 +165,26 @@ class UserInfoHandler(TokenHandler):
             respBodyDict = yield dao.getUserInfoByUsername(username)
             respBodyDict.pop("password")
             self.set_status(200)
+            STATSD_CONN.timing('timing [GET] /v1/user/self ', (time.time() - service_start_time) * 1000)
             self.write(respBodyDict)
 
         except Exception as e:
             Logger.getInstance().exception(e)
+            STATSD_CONN.timing('timing [GET] /v1/user/self ', (time.time() - service_start_time) * 1000)
+            return
 
     @tornado.gen.coroutine
     def put(self):
+        service_start_time = time.time()
         try:
+            STATSD_CONN.incr('[PUT] /v1/user/self')
+
             self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
 
             if not self.token_passed:
                 Logger.getInstance().info('token auth fail')
                 self.set_status(400)
+                STATSD_CONN.timing('timing [PUT] /v1/user/self ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
@@ -178,6 +204,7 @@ class UserInfoHandler(TokenHandler):
                 if key not in allowFields:
                     Logger.getInstance().info('Only allow modify first_name, last_name, and password')
                     self.set_status(400)
+                    STATSD_CONN.timing('timing [PUT] /v1/user/self ', (time.time() - service_start_time) * 1000)
                     self.finish()
                     return
 
@@ -187,6 +214,7 @@ class UserInfoHandler(TokenHandler):
             if userInfo is None:
                 Logger.getInstance().info('username[{username}] is not allowed to change'.format(username=username))
                 self.set_status(400)
+                STATSD_CONN.timing('timing [PUT] /v1/user/self ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
@@ -207,13 +235,16 @@ class UserInfoHandler(TokenHandler):
             if isSuccess:
                 Logger.getInstance().info('update user successfully, username[%s]' % username)
                 self.set_status(204)
+                STATSD_CONN.timing('timing [PUT] /v1/user/self ', (time.time() - service_start_time) * 1000)
                 self.finish()
             else:
                 self.set_status(500)
+                STATSD_CONN.timing('timing [PUT] /v1/user/self ', (time.time() - service_start_time) * 1000)
                 self.finish()
 
         except Exception as err:
             Logger.getInstance().exception(err)
+            STATSD_CONN.timing('timing [PUT] /v1/user/self ', (time.time() - service_start_time) * 1000)
 
 
 class PictureHandler(TokenHandler):
@@ -225,12 +256,16 @@ class PictureHandler(TokenHandler):
 
     @tornado.gen.coroutine
     def post(self):
+        service_start_time = time.time()
         try:
+            STATSD_CONN.incr('[POST] /v1/user/self/pic')
+
             self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
 
             if not self.token_passed:
                 Logger.getInstance().info('token auth fail')
                 self.set_status(400)
+                STATSD_CONN.timing('timing [POST] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
@@ -239,6 +274,7 @@ class PictureHandler(TokenHandler):
             if len(files) == 0:
                 Logger.getInstance().info('Cannot receive any picture file')
                 self.set_status(400)
+                STATSD_CONN.timing('timing [POST] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
 
             file = files[0]
@@ -246,18 +282,21 @@ class PictureHandler(TokenHandler):
             if file_name is None:
                 Logger.getInstance().info('Cannot get picture file name')
                 self.set_status(400)
+                STATSD_CONN.timing('timing [POST] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
 
             file_data = file.get('body', None)
             if file_data is None:
                 Logger.getInstance().info('Cannot get picture file data')
                 self.set_status(400)
+                STATSD_CONN.timing('timing [POST] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
 
             file_type = file.get('content_type', None)
             if file_type is None:
                 Logger.getInstance().info('Cannot get picture file type')
                 self.set_status(400)
+                STATSD_CONN.timing('timing [POST] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
 
             # Get user info
@@ -293,22 +332,28 @@ class PictureHandler(TokenHandler):
             resp_body = yield img_dao.getUserImage(user_id)
 
             self.set_status(201)
+            STATSD_CONN.timing('timing [POST] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
             self.write(resp_body)
 
         except Exception as err:
             Logger.getInstance().exception(err)
             self.set_status(400)
+            STATSD_CONN.timing('timing [POST] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
             self.finish()
             return
 
     @tornado.gen.coroutine
     def get(self):
+        service_start_time = time.time()
         try:
+            STATSD_CONN.incr('[GET] /v1/user/self/pic')
+
             self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
 
             if not self.token_passed:
                 Logger.getInstance().info('token auth fail')
                 self.set_status(400)
+                STATSD_CONN.timing('timing [GET] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
@@ -321,25 +366,32 @@ class PictureHandler(TokenHandler):
                 resp_body = yield img_dao.getUserImage(user_id)
 
                 self.set_status(200)
+                STATSD_CONN.timing('timing [GET] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.write(resp_body)
             else:
                 self.set_status(404)
+                STATSD_CONN.timing('timing [GET] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
 
         except Exception as err:
             Logger.getInstance().exception(err)
             self.set_status(400)
+            STATSD_CONN.timing('timing [GET] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
             self.finish()
             return
 
     @tornado.gen.coroutine
     def delete(self):
+        service_start_time = time.time()
         try:
+            STATSD_CONN.incr('[DELETE] /v1/user/self/pic')
+
             self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
 
             if not self.token_passed:
                 Logger.getInstance().info('token auth fail')
                 self.set_status(401)
+                STATSD_CONN.timing('timing [DELETE] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
@@ -360,19 +412,22 @@ class PictureHandler(TokenHandler):
                 yield img_dao.deleteUserImage(user_id)
 
                 self.set_status(204)
+                STATSD_CONN.timing('timing [DELETE] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
             else:
                 self.set_status(404)
+                STATSD_CONN.timing('timing [DELETE] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
 
         except Exception as err:
             Logger.getInstance().exception(err)
+            STATSD_CONN.timing('timing [DELETE] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
 
 
 def make_app():
     return tornado.web.Application([
         (r"/healthz", HealthzHandler),
-        (r"/health", HealthHandler),
+        # (r"/health", HealthHandler),
         (r"/v1/user", UserCreateHandler),
         (r"/v1/user/self", UserInfoHandler),
         (r"/v1/user/self/pic", PictureHandler),
@@ -381,6 +436,7 @@ def make_app():
 
 if __name__ == "__main__":
     MYSQL_CONN_POOL = MysqlConnectPool(loop=asyncio.get_event_loop(), maxsize=10)
+    STATSD_CONN = statsd.StatsClient('localhost', 8125)  # statsd
     try:
         Logger.getInstance().info('=====service start======')
         app = make_app()
