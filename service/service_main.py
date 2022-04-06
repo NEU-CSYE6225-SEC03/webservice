@@ -77,16 +77,17 @@ class HealthzHandler(BaseHandler):
     def get(self):
         service_start_time = time.time()
         STATSD_CONN.incr('[GET] healthz')
-
         self.set_header("Content-Type", "application/json; charset=utf-8")
-        self.finish()
-
         STATSD_CONN.timing('timing [GET] healthz ', (time.time() - service_start_time) * 1000)
+        self.finish()
 
 
 class HealthHandler(BaseHandler):
     def get(self):
+        service_start_time = time.time()
+        STATSD_CONN.incr('[GET] health')
         self.set_header("Content-Type", "application/json; charset=utf-8")
+        STATSD_CONN.timing('timing [GET] health ', (time.time() - service_start_time) * 1000)
         self.finish()
 
 
