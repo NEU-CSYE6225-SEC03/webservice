@@ -540,7 +540,7 @@ class PictureHandler(TokenHandler):
 
             if not self.token_passed:
                 Logger.getInstance().info('token auth fail')
-                self.set_status(401)
+                self.set_status(400)
                 STATSD_CONN.timing('timing [DELETE] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
