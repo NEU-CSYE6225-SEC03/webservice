@@ -205,7 +205,7 @@ class UserVerifyHandler(BaseHandler):
             Logger.getInstance().info("get email & token from GET request API /v1/verifyUserEmail, email is {email}, token is {token}".format(email=username, token=token))
 
             # 根据 ttl 查 DynamoDB, 查看 record 有没有过期
-            db_resource = boto3.resource('dynamodb')
+            db_resource = boto3.resource('dynamodb', region_name='us-east-1')
             table = db_resource.Table('verification')
             search_response = table.get_item(
                 Key={
