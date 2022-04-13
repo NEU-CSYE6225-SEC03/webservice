@@ -78,6 +78,7 @@ class HealthzHandler(BaseHandler):
         service_start_time = time.time()
         STATSD_CONN.incr('[GET] healthz')
         self.set_header("Content-Type", "application/json; charset=utf-8")
+        Logger.getInstance().info('hello old point')
         STATSD_CONN.timing('timing [GET] healthz ', (time.time() - service_start_time) * 1000)
         self.finish()
 
