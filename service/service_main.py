@@ -143,8 +143,8 @@ class UserCreateHandler(BaseHandler):
             password = encrypt(password)  # encrypt password
             isSuccess, respBodyDict = yield dao.createUser(first_name, last_name, username, password)
             if isSuccess:
-                # 创建 one-time use token, 5 mins 后过期
-                token = createToken(payload={}, timeout=5)
+                # 创建 token, ??? mins 后过期
+                token = createToken(payload={}, timeout=999999999)
 
                 # Publish sns, 触发 Lambda 操作, 操作 DynamoDb 并发邮件
                 sns_client = boto3.client('sns', region_name='us-east-1')
@@ -199,6 +199,23 @@ class UserVerifyHandler(BaseHandler):
                 return
 
             Logger.getInstance().info("get email & token from GET request API /v1/verifyUserEmail, email is {email}, token is {token}".format(email=username, token=token))
+
+            # 根据 ttl 查 DynamoDB, 查看 record 有没有过期
+            db_resource = boto3.resource('dynamodb')
+            table = db_resource.Table('verification')
+            search_response = table.get_item(
+                Key={
+                    "email": username
+                }
+            )
+            if 'Item' in search_response:
+                Logger.getInstance().info('find record in dynamodb with email {}'.format(username))
+            else:
+                Logger.getInstance().info('Cannot find record in dynamodb with email {}, probably record is expired'.format(username))
+                self.set_status(400)
+                STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
+                self.finish()
+                return
 
             # 判断 get 带的 token 是否过期, 以及 one-time use
             token_good = parsePayload(token).get("status")
