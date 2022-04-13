@@ -162,6 +162,10 @@ class UserCreateHandler(BaseHandler):
                 # respBodyDict['token'] = createToken(payload={"username": username, "password": password}, timeout=20)  # JWT token
                 self.set_status(201)
                 STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
+                # self.write(respBodyDict)
+
+                respBodyDict['TopicArn'] = Config.getInstance()['SNSTopic']
+                respBodyDict['sns_message'] = str(sns_message)
                 self.write(respBodyDict)
             else:
                 self.set_status(500)
