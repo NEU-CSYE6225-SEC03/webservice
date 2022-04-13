@@ -89,21 +89,37 @@ class TokenHandler(BaseHandler):
 class HealthzHandler(BaseHandler):
     def get(self):
         service_start_time = time.time()
-        STATSD_CONN.incr('[GET] healthz')
-        self.set_header("Content-Type", "application/json; charset=utf-8")
-        Logger.getInstance().info('hello old point')
-        STATSD_CONN.timing('timing [GET] healthz ', (time.time() - service_start_time) * 1000)
-        self.finish()
+        try:
+            STATSD_CONN.incr('[GET] healthz')
+            self.set_header("Content-Type", "application/json; charset=utf-8")
+            Logger.getInstance().info('[GET] healthz')
+            STATSD_CONN.timing('timing [GET] healthz ', (time.time() - service_start_time) * 1000)
+            self.finish()
+            return
+        except Exception as err:
+            Logger.getInstance().exception(err)
+            self.set_status(500)
+            STATSD_CONN.timing('timing [GET] healthz ', (time.time() - service_start_time) * 1000)
+            self.write(str(err))
+            return
 
 
-class HealthHandler(BaseHandler):
-    def get(self):
-        service_start_time = time.time()
-        STATSD_CONN.incr('[GET] health')
-        self.set_header("Content-Type", "application/json; charset=utf-8")
-        Logger.getInstance().info('hello new point')
-        STATSD_CONN.timing('timing [GET] health ', (time.time() - service_start_time) * 1000)
-        self.finish()
+# class HealthHandler(BaseHandler):
+#     def get(self):
+#         service_start_time = time.time()
+#         try:
+#             STATSD_CONN.incr('[GET] health')
+#             self.set_header("Content-Type", "application/json; charset=utf-8")
+#             Logger.getInstance().info('[GET] health')
+#             STATSD_CONN.timing('timing [GET] health ', (time.time() - service_start_time) * 1000)
+#             self.finish()
+#             return
+#         except Exception as err:
+#             Logger.getInstance().exception(err)
+#             self.set_status(500)
+#             STATSD_CONN.timing('timing [GET] health ', (time.time() - service_start_time) * 1000)
+#             self.write(str(err))
+#             return
 
 
 class UserCreateHandler(BaseHandler):
@@ -144,7 +160,7 @@ class UserCreateHandler(BaseHandler):
             isSuccess, respBodyDict = yield dao.createUser(first_name, last_name, username, password)
             if isSuccess:
                 # 创建 token, ??? mins 后过期
-                token = createToken(payload={}, timeout=999999999)
+                token = createToken(payload={"username": username}, timeout=999999999)
 
                 # Publish sns, 触发 Lambda 操作, 操作 DynamoDb 并发邮件
                 sns_client = boto3.client('sns', region_name='us-east-1')
@@ -162,10 +178,6 @@ class UserCreateHandler(BaseHandler):
                 # respBodyDict['token'] = createToken(payload={"username": username, "password": password}, timeout=20)  # JWT token
                 self.set_status(201)
                 STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
-                # self.write(respBodyDict)
-
-                respBodyDict['TopicArn'] = Config.getInstance()['SNSTopic']
-                respBodyDict['sns_message'] = str(sns_message)
                 self.write(respBodyDict)
             else:
                 self.set_status(500)
@@ -174,9 +186,9 @@ class UserCreateHandler(BaseHandler):
 
         except Exception as err:
             Logger.getInstance().exception(err)
-            self.set_status(501)
+            self.set_status(500)
             STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
-            self.finish()
+            self.write(str(err))
             return
 
 
@@ -188,6 +200,7 @@ class UserVerifyHandler(BaseHandler):
             STATSD_CONN.incr('[GET] /v1/verifyUserEmail')
 
             self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
+
             username = self.get_argument('email', default=None)
             token = self.get_argument('token', default=None)
 
@@ -198,7 +211,7 @@ class UserVerifyHandler(BaseHandler):
                     Logger.getInstance().info("can't get token from GET request API /v1/verifyUserEmail")
 
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
-                self.set_status(490)
+                self.set_status(400)
                 self.finish()
                 return
 
@@ -216,23 +229,40 @@ class UserVerifyHandler(BaseHandler):
                 Logger.getInstance().info('find record in dynamodb with email {}'.format(username))
             else:
                 Logger.getInstance().info('Cannot find record in dynamodb with email {}, probably record is expired'.format(username))
-                self.set_status(491)
+                self.set_status(400)
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
             # 判断 get 带的 token 是否过期, 以及 one-time use
-            token_good = parsePayload(token).get("status")
+            token_parse_res = parsePayload(token)
+            token_good = token_parse_res.get("status")
             if not token_good:
                 Logger.getInstance().info('Token error, probably it has been expired, token info[{}]'.format(token))
-                self.set_status(492)
+                self.set_status(400)
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
+            else:
+                data = token_parse_res.get("data")
+                if data is not None:
+                    token_username = data.get("username", None)
+                    if token_username is None or token_username != username:
+                        Logger.getInstance().info("Token error, token doesn't has username or unmatched username, token info[{}]".format(token))
+                        self.set_status(400)
+                        STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
+                        self.finish()
+                        return
+                else:
+                    Logger.getInstance().info("Token error, fail to get data field within token, token info[{}]".format(token))
+                    self.set_status(400)
+                    STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
+                    self.finish()
+                    return
 
             if token in TOKEN_SET:
                 Logger.getInstance().info('One-time token was used, token info[{}]'.format(token))
-                self.set_status(493)
+                self.set_status(400)
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
@@ -241,11 +271,6 @@ class UserVerifyHandler(BaseHandler):
 
             dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
             is_success = yield dao.updateVerifiedByUsername(username)
-
-            respBodyDict = yield dao.getUserInfoByUsername(username)
-            self.set_status(666)
-            self.write(respBodyDict)
-
             if is_success:
                 Logger.getInstance().info('update user verification successfully, username[%s]' % username)
                 self.set_status(200)
@@ -253,17 +278,16 @@ class UserVerifyHandler(BaseHandler):
                 self.finish()
             else:
                 Logger.getInstance().info('Failed to update user verification, username[%s]' % username)
-                self.set_status(494)
+                self.set_status(400)
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
                 self.finish()
+                return
 
         except Exception as e:
-
-            self.set_status(999)
-            self.write(str(e))
-
+            self.set_status(500)
             Logger.getInstance().exception(e)
             STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
+            self.write(str(e))
             return
 
 
@@ -366,8 +390,11 @@ class UserInfoHandler(TokenHandler):
                 self.finish()
 
         except Exception as err:
+            self.set_status(500)
             Logger.getInstance().exception(err)
             STATSD_CONN.timing('timing [PUT] /v1/user/self ', (time.time() - service_start_time) * 1000)
+            self.write(str(err))
+            return
 
 
 class PictureHandler(TokenHandler):
@@ -460,9 +487,9 @@ class PictureHandler(TokenHandler):
 
         except Exception as err:
             Logger.getInstance().exception(err)
-            self.set_status(400)
+            self.set_status(500)
             STATSD_CONN.timing('timing [POST] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
-            self.finish()
+            self.write(str(err))
             return
 
     @tornado.gen.coroutine
@@ -498,9 +525,9 @@ class PictureHandler(TokenHandler):
 
         except Exception as err:
             Logger.getInstance().exception(err)
-            self.set_status(400)
+            self.set_status(500)
             STATSD_CONN.timing('timing [GET] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
-            self.finish()
+            self.write(str(err))
             return
 
     @tornado.gen.coroutine
@@ -543,14 +570,17 @@ class PictureHandler(TokenHandler):
                 self.finish()
 
         except Exception as err:
+            self.set_status(500)
             Logger.getInstance().exception(err)
             STATSD_CONN.timing('timing [DELETE] /v1/user/self/pic ', (time.time() - service_start_time) * 1000)
+            self.write(str(err))
+            return
 
 
 def make_app():
     return tornado.web.Application([
         (r"/healthz", HealthzHandler),
-        (r"/health", HealthHandler),
+        # (r"/health", HealthHandler),
         (r"/v1/user", UserCreateHandler),
         (r"/v1/verifyUserEmail", UserVerifyHandler),
         (r"/v1/user/self", UserInfoHandler),
