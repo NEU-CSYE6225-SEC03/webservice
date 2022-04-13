@@ -162,6 +162,10 @@ class UserCreateHandler(BaseHandler):
                 # respBodyDict['token'] = createToken(payload={"username": username, "password": password}, timeout=20)  # JWT token
                 self.set_status(201)
                 STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
+                # self.write(respBodyDict)
+
+                respBodyDict['TopicArn'] = Config.getInstance()['SNSTopic']
+                respBodyDict['sns_message'] = str(sns_message)
                 self.write(respBodyDict)
             else:
                 self.set_status(500)
@@ -194,7 +198,7 @@ class UserVerifyHandler(BaseHandler):
                     Logger.getInstance().info("can't get token from GET request API /v1/verifyUserEmail")
 
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
-                self.set_status(400)
+                self.set_status(490)
                 self.finish()
                 return
 
@@ -212,7 +216,7 @@ class UserVerifyHandler(BaseHandler):
                 Logger.getInstance().info('find record in dynamodb with email {}'.format(username))
             else:
                 Logger.getInstance().info('Cannot find record in dynamodb with email {}, probably record is expired'.format(username))
-                self.set_status(400)
+                self.set_status(491)
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
@@ -221,14 +225,14 @@ class UserVerifyHandler(BaseHandler):
             token_good = parsePayload(token).get("status")
             if not token_good:
                 Logger.getInstance().info('Token error, probably it has been expired, token info[{}]'.format(token))
-                self.set_status(400)
+                self.set_status(492)
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
 
             if token in TOKEN_SET:
                 Logger.getInstance().info('One-time token was used, token info[{}]'.format(token))
-                self.set_status(400)
+                self.set_status(493)
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
@@ -237,6 +241,11 @@ class UserVerifyHandler(BaseHandler):
 
             dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
             is_success = yield dao.updateVerifiedByUsername(username)
+
+            respBodyDict = yield dao.getUserInfoByUsername(username)
+            self.set_status(666)
+            self.write(respBodyDict)
+
             if is_success:
                 Logger.getInstance().info('update user verification successfully, username[%s]' % username)
                 self.set_status(200)
@@ -244,11 +253,15 @@ class UserVerifyHandler(BaseHandler):
                 self.finish()
             else:
                 Logger.getInstance().info('Failed to update user verification, username[%s]' % username)
-                self.set_status(500)
+                self.set_status(494)
                 STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
                 self.finish()
 
         except Exception as e:
+
+            self.set_status(999)
+            self.write(str(e))
+
             Logger.getInstance().exception(e)
             STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
             return
@@ -265,7 +278,7 @@ class UserInfoHandler(TokenHandler):
 
             if not self.token_passed:
                 Logger.getInstance().info('token auth fail')
-                self.set_status(400)
+                self.set_status(470)
                 STATSD_CONN.timing('timing [GET] /v1/user/self ', (time.time() - service_start_time) * 1000)
                 self.finish()
                 return
