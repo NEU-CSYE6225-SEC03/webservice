@@ -154,6 +154,8 @@ class UserCreateHandler(BaseHandler):
                     'token': token,
                     'verify_link': verify_link
                 }
+                Logger.getInstance().info('sns_message: {msg}'.format(msg=sns_message))
+                Logger.getInstance().info('TopicArn: {TopicArn}'.format(TopicArn=Config.getInstance()['SNSTopic']))
                 sns_client.publish(TopicArn=Config.getInstance()['SNSTopic'],
                                    Message=json.dumps(sns_message))
 
