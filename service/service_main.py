@@ -54,7 +54,14 @@ class TokenHandler(BaseHandler):
                         dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
                         userInfo = yield dao.getUserInfoByUsername(username)
                         if userInfo is not None and (username == userInfo["username"] and checkSame(password, userInfo["password"])):
-                            self.token_passed = True
+                            username_verified = yield dao.usernameVerified(username)
+                            if username_verified:
+                                Logger.getInstance().info('Username from basic token is verified!')
+                                self.token_passed = True
+                            else:
+                                Logger.getInstance().info('Username from basic token is unverified......')
+                        else:
+                            Logger.getInstance().info('Username and password from basic token are unmatched with database')
         else:
             # jwt auth token
             result = parsePayload(token)
@@ -70,7 +77,13 @@ class TokenHandler(BaseHandler):
                         dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
                         userInfo = yield dao.getUserInfoByUsername(username)
                         if userInfo is not None and (userInfo["username"] == username and userInfo["password"] == password):
-                            self.token_passed = True
+                            username_verified = yield dao.usernameVerified(username)
+                            if username_verified:
+                                self.token_passed = True
+                            else:
+                                Logger.getInstance().info('Username from jwt token is unverified')
+                        else:
+                            Logger.getInstance().info('Username and password jwt from token are unmatched with database')
 
 
 class HealthzHandler(BaseHandler):
@@ -130,6 +143,20 @@ class UserCreateHandler(BaseHandler):
             password = encrypt(password)  # encrypt password
             isSuccess, respBodyDict = yield dao.createUser(first_name, last_name, username, password)
             if isSuccess:
+                # 创建 one-time use token, 5 mins 后过期
+                token = createToken(payload={}, timeout=5)
+
+                # Publish sns, 触发 Lambda 操作, 操作 DynamoDb 并发邮件
+                sns_client = boto3.client('sns', region_name='us-east-1')
+                verify_link = "http://prod.weifenglai.me/v1/verifyUserEmail?email={username}&token={token}".format(username=username, token=token)
+                sns_message = {
+                    'email': username,
+                    'token': token,
+                    'verify_link': verify_link
+                }
+                sns_client.publish(TopicArn=Config.getInstance()['SNSTopic'],
+                                   Message=json.dumps(sns_message))
+
                 # respBodyDict['token'] = createToken(payload={"username": username, "password": password}, timeout=20)  # JWT token
                 self.set_status(201)
                 STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
@@ -144,6 +171,67 @@ class UserCreateHandler(BaseHandler):
             self.set_status(501)
             STATSD_CONN.timing('timing [POST] /v1/user ', (time.time() - service_start_time) * 1000)
             self.finish()
+            return
+
+
+class UserVerifyHandler(BaseHandler):
+    @tornado.gen.coroutine
+    def get(self):
+        service_start_time = time.time()
+        try:
+            STATSD_CONN.incr('[GET] /v1/verifyUserEmail')
+
+            self.set_header("Content-Type", "application/json; charset=utf-8")  # set response header
+            username = self.get_argument('email', default=None)
+            token = self.get_argument('token', default=None)
+
+            if username is None or token is None:
+                if username is None:
+                    Logger.getInstance().info("can't get username from GET request API /v1/verifyUserEmail")
+                if token is None:
+                    Logger.getInstance().info("can't get token from GET request API /v1/verifyUserEmail")
+
+                STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
+                self.set_status(400)
+                self.finish()
+                return
+
+            Logger.getInstance().info("get email & token from GET request API /v1/verifyUserEmail, email is {email}, token is {token}".format(email=username, token=token))
+
+            # 判断 get 带的 token 是否过期, 以及 one-time use
+            token_good = parsePayload(token).get("status")
+            if not token_good:
+                Logger.getInstance().info('Token error, probably it has been expired, token info[{}]'.format(token))
+                self.set_status(400)
+                STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
+                self.finish()
+                return
+
+            if token in TOKEN_SET:
+                Logger.getInstance().info('One-time token was used, token info[{}]'.format(token))
+                self.set_status(400)
+                STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
+                self.finish()
+                return
+            else:
+                TOKEN_SET.add(token)
+
+            dao = UserDAO(connect_pool=MYSQL_CONN_POOL.getPool())
+            is_success = yield dao.updateVerifiedByUsername(username)
+            if is_success:
+                Logger.getInstance().info('update user verification successfully, username[%s]' % username)
+                self.set_status(200)
+                STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
+                self.finish()
+            else:
+                Logger.getInstance().info('Failed to update user verification, username[%s]' % username)
+                self.set_status(500)
+                STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
+                self.finish()
+
+        except Exception as e:
+            Logger.getInstance().exception(e)
+            STATSD_CONN.timing('timing [GET] /v1/verifyUserEmail', (time.time() - service_start_time) * 1000)
             return
 
 
@@ -432,6 +520,7 @@ def make_app():
         (r"/healthz", HealthzHandler),
         (r"/health", HealthHandler),
         (r"/v1/user", UserCreateHandler),
+        (r"/v1/verifyUserEmail", UserVerifyHandler),
         (r"/v1/user/self", UserInfoHandler),
         (r"/v1/user/self/pic", PictureHandler),
     ])
@@ -440,6 +529,7 @@ def make_app():
 if __name__ == "__main__":
     MYSQL_CONN_POOL = MysqlConnectPool(loop=asyncio.get_event_loop(), maxsize=10)
     STATSD_CONN = statsd.StatsClient('localhost', 8125)  # statsd
+    TOKEN_SET = set()
     try:
         Logger.getInstance().info('=====service start======')
         app = make_app()
