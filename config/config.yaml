@@ -22,5 +22,5 @@ MYSQL_USERNAME: 'csye6225'
 # MySQL Password
 MYSQL_PASSWORD: 'csye6225Lwf'
 
-# MySQL_IP, S3BUCKETNAME ... which will be filled by shell script
+# MySQL_IP, S3BUCKETNAME, SNSTopic ... which will be filled by shell script
 

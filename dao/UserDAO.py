@@ -12,6 +12,20 @@ class UserDAO(object):
     def __init__(self, connect_pool):
         self.connect_pool = connect_pool
 
+    async def usernameVerified(self, username: str):
+        selectResult = None
+        async with self.connect_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                try:
+                    await cursor.execute("SELECT id FROM user WHERE username = %s and verified = TRUE", [username, ])
+                    selectResult = await cursor.fetchone()
+                    Logger.getInstance().info('execute sql to determine verification of username[%s]' % username)
+
+                except Exception as e:
+                    Logger.getInstance().exception(e)
+
+        return selectResult is not None
+
     async def usernameExist(self, username: str):
         selectResult = None
         async with self.connect_pool.acquire() as conn:
@@ -49,7 +63,7 @@ class UserDAO(object):
             async with conn.cursor() as cursor:
                 try:
                     await cursor.execute(
-                        "SELECT id, first_name, last_name, username, password, account_created, account_updated FROM user WHERE userName = %s",
+                        "SELECT id, first_name, last_name, username, password, account_created, account_updated, verified FROM user WHERE userName = %s",
                         [username, ])
                     Logger.getInstance().info('execute sql to get info of user by username[%s]' % username)
                     selectResult = await cursor.fetchone()
@@ -65,7 +79,8 @@ class UserDAO(object):
                 'username': selectResult[3],
                 'password': selectResult[4],
                 'account_created': selectResult[5].strftime("%Y-%m-%d %H:%M:%S"),
-                'account_updated': selectResult[6].strftime("%Y-%m-%d %H:%M:%S")
+                'account_updated': selectResult[6].strftime("%Y-%m-%d %H:%M:%S"),
+                'verified': selectResult[7]
             }
         else:
             return None
@@ -93,6 +108,24 @@ class UserDAO(object):
         else:
             return False
 
+    async def updateVerifiedByUsername(self, username: str):
+        affectRowNum = 0
+        async with self.connect_pool.acquire() as conn:
+            async with conn.cursor() as cursor:
+                try:
+                    affectRowNum = await cursor.execute("UPDATE user SET verified = TRUE where username = %s",
+                                                        [username, ])
+
+                    Logger.getInstance().info('execute sql to update verified by username[%s]' % username)
+                    await conn.commit()
+                except Exception as e:
+                    Logger.getInstance().exception(e)
+
+        if affectRowNum:
+            return True
+        else:
+            return False
+
     async def createUser(self, first_name: str, last_name: str, username: str, password: str):
         table = 'user'
         data = {
@@ -102,7 +135,8 @@ class UserDAO(object):
             'username': username,
             'password': password,
             'account_created': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            'account_updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            'account_updated': datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            'verified': False
         }
         keys = ', '.join(data.keys())
         values = ', '.join(['%s'] * len(data))

@@ -45,6 +45,20 @@ def parsePayload(token) -> dict:
 
 
 if __name__ == '__main__':
-    token = createToken(payload={'username': 'lwf@gg.com', 'password': '123'})
+    # create and valid
+    # token = createToken(payload={'username': 'lwf@gg.com', 'password': '123'})
+    # res = parsePayload(token)
+    # print(res)
+
+    # create with timeout and valid
+    # token = "eyJ0eXAiOiJqd3QiLCJhbGciOiJIUzI1NiJ9.eyJleHAiOjE2NDk4MDQ5MDF9.u4ngrQCWeG42fXXtpvVD-IIs6muj7SMsPSHiVHxec04"
+    token = createToken(payload={}, timeout=1)
+    print(token)
     res = parsePayload(token)
     print(res)
+    token_good = parsePayload(token).get("status")
+    print(token_good)
+
+    username = "1@gmial.com"
+    verify_link = "http://prod.weifenglai.me/v1/verifyUserEmail?email={username}&token={token}".format(username=username, token=token)
+    print(verify_link)
