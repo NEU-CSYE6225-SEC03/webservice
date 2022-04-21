@@ -1,3 +1,4 @@
+import ssl
 import aiomysql
 
 from tool.Config import Config
@@ -28,11 +29,14 @@ class MysqlConnectPool(object):
         self.loop.run_until_complete(self.createPool())
 
     async def createPool(self):
+        ssl_ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+        ssl_ctx.load_verify_locations(cafile='/home/ec2-user/webservice/config/us-east-1-bundle.cer')
         self.connect_pool = await aiomysql.create_pool(loop=self.loop,
                                                        host=self.host, port=self.port,
                                                        user=self.user, password=self.password,
                                                        db=self.database, charset="utf8",
-                                                       maxsize=self.maxsize, minsize=1)
+                                                       maxsize=self.maxsize, minsize=1, 
+                                                       ssl=ssl_ctx)
 
     def getPool(self):
         return self.connect_pool
