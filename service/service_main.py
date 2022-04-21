@@ -164,7 +164,7 @@ class UserCreateHandler(BaseHandler):
 
                 # Publish sns, 触发 Lambda 操作, 操作 DynamoDb 并发邮件
                 sns_client = boto3.client('sns', region_name='us-east-1')
-                verify_link = "http://prod.weifenglai.me/v1/verifyUserEmail?email={username}&token={token}".format(username=username, token=token)
+                verify_link = "https://prod.weifenglai.me/v1/verifyUserEmail?email={username}&token={token}".format(username=username, token=token)
                 sns_message = {
                     'email': username,
                     'token': token,
